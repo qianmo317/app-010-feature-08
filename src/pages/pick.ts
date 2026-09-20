@@ -1,12 +1,28 @@
 import { router } from '../router';
 import { createElement, clearElement } from '../utils/dom';
-import { pickDays, categorizeResults, PickResult } from '../almanac/pick-day';
 import { EVENT_WEIGHTS } from '../almanac/yiji';
-import html2canvas from 'html2canvas';
+import {
+  CompareBoard, CompareRange, CompareDay, MarkType, MARK_LABELS,
+  MAX_RANGES, TOP_DATES_PER_RANGE,
+} from '../almanac/compare';
+
+const STORAGE_KEY = 'pick-compare-board-v1';
+const EXPANDED_TOP_N = 30;
 
 export function renderPick(app: HTMLElement) {
   clearElement(app);
   app.className = 'page pick-page';
+
+  const board = loadBoard();
+  const expandedRanges = new Set<number>();
+
+  const save = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, board.toJSON());
+    } catch {
+      // 隐私模式等场景下本地保存不可用时静默降级
+    }
+  };
 
   const now = new Date();
   const defaultStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -46,7 +62,7 @@ export function renderPick(app: HTMLElement) {
   // 日期范围
   const dateSection = createElement('div', 'form-section');
   dateSection.innerHTML = `
-    <label>日期范围</label>
+    <label>日期范围（每次算一个区间，加入后可再添加，最多 ${MAX_RANGES} 个对照）</label>
     <div class="date-range">
       <input type="date" id="start-date" value="${defaultStart}">
       <span>至</span>
@@ -62,202 +78,285 @@ export function renderPick(app: HTMLElement) {
   `;
 
   // 提交按钮
-  const submitBtn = createElement('button', 'submit-btn', '开始择日');
+  const submitBtn = createElement('button', 'submit-btn', '计算并加入对比');
 
   form.append(eventsSection, dateSection, avoidSection, submitBtn);
 
-  // 结果区域
-  const resultArea = createElement('div', 'result-area');
+  // 对比板区域
+  const boardArea = createElement('div', 'board-area');
 
   submitBtn.addEventListener('click', () => {
-    if (selectedEvents.size === 0) {
-      alert('请至少选择一个事项');
-      return;
-    }
-
     const startDate = (document.getElementById('start-date') as HTMLInputElement).value;
     const endDate = (document.getElementById('end-date') as HTMLInputElement).value;
     const avoidInput = (document.getElementById('avoid-shengxiao') as HTMLInputElement).value;
     const avoidShengxiao = avoidInput.split(/[,，]/).map(s => s.trim()).filter(Boolean);
 
-    const [sy, sm, sd] = startDate.split('-').map(Number);
-    const [ey, em, ed] = endDate.split('-').map(Number);
-
-    const startTime = performance.now();
-    const results = pickDays(sy, sm, sd, ey, em, ed, Array.from(selectedEvents), avoidShengxiao);
-    const endTime = performance.now();
-
-    renderResults(resultArea, results, endTime - startTime);
-  });
-
-  app.append(header, form, resultArea);
-}
-
-function renderResults(container: HTMLElement, results: PickResult[], elapsed: number) {
-  clearElement(container);
-
-  const { best, good, normal, bad } = categorizeResults(results);
-
-  const stats = createElement('div', 'result-stats');
-  stats.innerHTML = `
-    <span>大吉 ${best.length} 天</span>
-    <span>吉 ${good.length} 天</span>
-    <span>平 ${normal.length} 天</span>
-    <span>凶 ${bad.length} 天</span>
-    <span class="elapsed">计算耗时 ${elapsed.toFixed(1)}ms</span>
-  `;
-  container.appendChild(stats);
-
-  // 最佳日期
-  if (best.length > 0) {
-    const bestSection = createElement('div', 'result-section');
-    bestSection.innerHTML = '<h3 class="section-title best">大吉之日</h3>';
-    const grid = createElement('div', 'result-grid');
-    best.forEach(r => grid.appendChild(createResultCard(r)));
-    bestSection.appendChild(grid);
-    container.appendChild(bestSection);
-  }
-
-  // 吉日
-  if (good.length > 0) {
-    const goodSection = createElement('div', 'result-section');
-    goodSection.innerHTML = '<h3 class="section-title good">吉日</h3>';
-    const grid = createElement('div', 'result-grid');
-    good.slice(0, 20).forEach(r => grid.appendChild(createResultCard(r)));
-    goodSection.appendChild(grid);
-    container.appendChild(goodSection);
-  }
-
-  // 导出按钮
-  const exportBtn = createElement('button', 'export-btn', '导出吉日清单') as HTMLButtonElement;
-  exportBtn.addEventListener('click', () => {
-    exportBtn.textContent = '生成图片中...';
-    exportBtn.disabled = true;
-    exportResults(results).finally(() => {
-      exportBtn.textContent = '导出吉日清单';
-      exportBtn.disabled = false;
+    const res = board.addRange({
+      startDate,
+      endDate,
+      events: Array.from(selectedEvents),
+      avoidShengxiao,
     });
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
+    save();
+    renderBoard();
   });
-  container.appendChild(exportBtn);
-}
 
-function createResultCard(result: PickResult): HTMLElement {
-  const card = createElement('div', `result-card score-${Math.floor(result.score / 20)}`);
-  card.innerHTML = `
-    <div class="result-date">${result.year}-${String(result.month).padStart(2, '0')}-${String(result.day).padStart(2, '0')}</div>
-    <div class="result-ganzhi">${result.ganZhi}日</div>
-    <div class="result-score">${result.score}分</div>
-    <div class="result-reason">${result.reason}</div>
-    <div class="result-yi">${result.yi.slice(0, 4).map(y => `<span>${y}</span>`).join('')}</div>
-  `;
-  card.addEventListener('click', () => {
-    router.navigate(`/day/${result.year}-${String(result.month).padStart(2, '0')}-${String(result.day).padStart(2, '0')}`);
-  });
-  return card;
-}
+  app.append(header, form, boardArea);
+  renderBoard();
 
-async function exportResults(results: PickResult[]) {
-  const goodResults = results.filter(r => r.score >= 60).slice(0, 50);
-  if (goodResults.length === 0) {
-    alert('没有可导出的吉日');
-    return;
+  // ---- 以下为对比板渲染 ----
+
+  function renderBoard() {
+    clearElement(boardArea);
+
+    if (board.ranges.length === 0) {
+      const empty = createElement('div', 'board-empty',
+        '还没有候选区间。算好一个区间后会保留在这里，可连续添加三五个区间对照，再把中意的日期勾成备选、记号或排除。');
+      boardArea.appendChild(empty);
+      return;
+    }
+
+    // 汇总条
+    const summary = createElement('div', 'board-summary');
+    const markCount = board.marks.length;
+    summary.appendChild(createElement('span', 'board-count',
+      `候选区间 ${board.ranges.length}/${MAX_RANGES} · 已标记 ${markCount} 天`));
+
+    const exportBtn = createElement('button', 'export-btn-inline', '导出对比结果');
+    exportBtn.addEventListener('click', () => {
+      const text = board.exportText();
+      const blob = new Blob(['\uFEFF' + text], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `择日对比_${new Date().toISOString().slice(0, 10)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    const clearBtn = createElement('button', 'clear-board-btn', '清空对比');
+    clearBtn.addEventListener('click', () => {
+      if (!confirm('确定清空所有候选区间、标记和定日吗？')) return;
+      board.clear();
+      save();
+      renderBoard();
+    });
+
+    summary.append(exportBtn, clearBtn);
+    boardArea.appendChild(summary);
+
+    // 已定吉日横幅
+    if (board.finalChoice) {
+      boardArea.appendChild(createFinalBanner(board.finalChoice));
+    }
+
+    // 区间对照
+    const grid = createElement('div', 'compare-grid');
+    board.ranges.forEach((range, i) => {
+      grid.appendChild(createRangeColumn(range, i));
+    });
+    boardArea.appendChild(grid);
+
+    // 取舍记录面板
+    if (board.marks.length > 0) {
+      boardArea.appendChild(createMarksPanel());
+    }
   }
 
-  // 创建离屏容器用于生成图片
-  const exportContainer = document.createElement('div');
-  exportContainer.style.cssText = `
-    position: fixed;
-    left: -9999px;
-    top: 0;
-    width: 360px;
-    background: #f7f3e9;
-    padding: 24px;
-    font-family: "Noto Serif SC", "Source Han Serif SC", serif;
-    color: #333;
-  `;
+  function createRangeColumn(range: CompareRange, index: number): HTMLElement {
+    const col = createElement('div', 'compare-col');
 
-  const title = document.createElement('h2');
-  title.style.cssText = 'text-align: center; margin: 0 0 16px 0; color: #c41e3a; font-size: 22px; letter-spacing: 4px;';
-  title.textContent = '择日吉日清单';
+    const head = createElement('div', 'compare-col-head');
+    head.appendChild(createElement('div', 'compare-col-title', `区间${index + 1}`));
+    const removeBtn = createElement('button', 'range-remove-btn', '移除');
+    removeBtn.addEventListener('click', () => {
+      board.removeRange(range.id);
+      save();
+      renderBoard();
+    });
+    head.appendChild(removeBtn);
+    col.appendChild(head);
 
-  const subtitle = document.createElement('div');
-  subtitle.style.cssText = 'text-align: center; font-size: 12px; color: #888; margin-bottom: 20px;';
-  subtitle.textContent = `共 ${goodResults.length} 个吉日 · ${new Date().toLocaleDateString('zh-CN')}`;
+    col.appendChild(createElement('div', 'compare-col-range', `${range.startDate} ~ ${range.endDate}`));
+    const avoid = range.avoidShengxiao.length > 0 ? ` · 避${range.avoidShengxiao.join('、')}` : '';
+    col.appendChild(createElement('div', 'compare-col-events', `事项：${range.events.join('、')}${avoid}`));
 
-  const seal = document.createElement('div');
-  seal.style.cssText = `
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 48px;
-    height: 48px;
-    border: 2px solid #c41e3a;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #c41e3a;
-    font-size: 11px;
-    font-weight: bold;
-    transform: rotate(-12deg);
-    opacity: 0.8;
-  `;
-  seal.textContent = '大吉';
-
-  const list = document.createElement('div');
-  list.style.cssText = 'display: flex; flex-direction: column; gap: 10px;';
-
-  goodResults.forEach((r) => {
-    const item = document.createElement('div');
-    const scoreColor = r.score >= 80 ? '#c41e3a' : r.score >= 60 ? '#d4a017' : '#666';
-    item.style.cssText = `
-      background: #fff;
-      border-radius: 8px;
-      padding: 12px;
-      border-left: 4px solid ${scoreColor};
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    const stats = createElement('div', 'compare-stats');
+    stats.innerHTML = `
+      <span class="stat-best">大吉 ${range.stats.best}</span>
+      <span class="stat-good">吉 ${range.stats.good}</span>
+      <span class="stat-normal">平 ${range.stats.normal}</span>
+      <span class="stat-bad">凶 ${range.stats.bad}</span>
     `;
-    item.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <span style="font-size: 16px; font-weight: bold;">${r.year}-${String(r.month).padStart(2, '0')}-${String(r.day).padStart(2, '0')}</span>
-        <span style="font-size: 14px; color: ${scoreColor}; font-weight: bold;">${r.score}分</span>
-      </div>
-      <div style="font-size: 13px; color: #666; margin-bottom: 4px;">${r.ganZhi}日 · ${r.reason}</div>
-      <div style="font-size: 12px; color: #888;">宜：${r.yi.slice(0, 5).join('、')}</div>
+    col.appendChild(stats);
+
+    if (range.duplicatesSkipped > 0) {
+      col.appendChild(createElement('div', 'compare-dup-note',
+        `与已有区间重复 ${range.duplicatesSkipped} 天，已略过`));
+    }
+
+    // 排在前面的日期
+    const expanded = expandedRanges.has(range.id);
+    const topN = expanded ? EXPANDED_TOP_N : TOP_DATES_PER_RANGE;
+    const list = createElement('div', 'top-date-list');
+    board.topDates(range, topN).forEach(day => {
+      list.appendChild(createTopDateRow(day));
+    });
+    col.appendChild(list);
+
+    if (range.days.length > TOP_DATES_PER_RANGE) {
+      const toggleBtn = createElement('button', 'top-toggle-btn',
+        expanded ? `收起（只看前 ${TOP_DATES_PER_RANGE} 天）` : `展开更多（前 ${EXPANDED_TOP_N} 天，共 ${range.days.length} 天）`);
+      toggleBtn.addEventListener('click', () => {
+        if (expanded) expandedRanges.delete(range.id);
+        else expandedRanges.add(range.id);
+        renderBoard();
+      });
+      col.appendChild(toggleBtn);
+    }
+
+    return col;
+  }
+
+  function createTopDateRow(day: CompareDay): HTMLElement {
+    const mark = board.getMark(day.lunarKey);
+    const isFinal = board.finalChoice?.lunarKey === day.lunarKey;
+    const row = createElement('div',
+      `top-date-row${mark ? ` mark-${mark.type}` : ''}${isFinal ? ' is-final' : ''}`);
+
+    const main = createElement('div', 'top-date-main');
+    main.innerHTML = `
+      <span class="top-date-solar">${day.date}</span>
+      <span class="top-date-lunar">${day.lunarText}</span>
+      <span class="top-date-score">${day.score}分</span>
+      ${isFinal ? '<span class="final-badge">已定</span>' : ''}
     `;
-    list.appendChild(item);
-  });
+    main.title = '点击查看当日详情';
+    main.addEventListener('click', () => router.navigate(`/day/${day.date}`));
+    row.appendChild(main);
 
-  const footer = document.createElement('div');
-  footer.style.cssText = 'text-align: center; margin-top: 20px; font-size: 11px; color: #aaa;';
-  footer.textContent = '老黄历择日 · 仅供参考';
+    const actions = createElement('div', 'top-date-actions');
+    (['candidate', 'noted', 'excluded'] as MarkType[]).forEach(type => {
+      const btn = createElement('button',
+        `mark-btn mark-btn-${type}${mark?.type === type ? ' active' : ''}`,
+        MARK_LABELS[type]);
+      btn.addEventListener('click', () => onMarkClick(day, type));
+      actions.appendChild(btn);
+    });
+    row.appendChild(actions);
 
-  exportContainer.appendChild(seal);
-  exportContainer.appendChild(title);
-  exportContainer.appendChild(subtitle);
-  exportContainer.appendChild(list);
-  exportContainer.appendChild(footer);
-  document.body.appendChild(exportContainer);
+    if (mark?.reason) {
+      row.appendChild(createElement('div', 'top-date-reason', `${MARK_LABELS[mark.type]}理由：${mark.reason}`));
+    }
+    return row;
+  }
 
+  function onMarkClick(day: CompareDay, type: MarkType) {
+    const existing = board.getMark(day.lunarKey);
+    if (existing?.type === type) {
+      // 再点一次同类标记 = 取消
+      board.clearMark(day.lunarKey);
+    } else {
+      const hint = type === 'excluded' ? '（排除必须写清原因）' : '（可留空）';
+      const reason = window.prompt(
+        `将 ${day.date}（${day.lunarText}）标记为「${MARK_LABELS[type]}」，写一句取舍理由${hint}：`,
+        existing?.reason ?? '');
+      if (reason === null) return;
+      const res = board.setMark(day.lunarKey, type, reason);
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+    }
+    save();
+    renderBoard();
+  }
+
+  function onDecide(lunarKey: string) {
+    const day = board.findDay(lunarKey);
+    if (!day) return;
+    const mark = board.getMark(lunarKey);
+    const reason = window.prompt(
+      `定下 ${day.date}（农历${day.lunarText}）为吉日，记下当时的理由：`,
+      mark?.reason ?? '');
+    if (reason === null) return;
+    const res = board.decide(lunarKey, reason);
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
+    save();
+    renderBoard();
+  }
+
+  function createFinalBanner(choice: NonNullable<CompareBoard['finalChoice']>): HTMLElement {
+    const banner = createElement('div', 'final-banner');
+    const decidedAt = new Date(choice.decidedAt).toLocaleString('zh-CN', { hour12: false });
+    banner.innerHTML = `
+      <div class="final-title">🎯 已定吉日：${choice.date}（农历${choice.lunarText}，${choice.score}分）</div>
+      <div class="final-reason">定日理由：${choice.reason}</div>
+      <div class="final-time">定日时间：${decidedAt}</div>
+    `;
+    const undoBtn = createElement('button', 'final-undo-btn', '撤销定日');
+    undoBtn.addEventListener('click', () => {
+      board.clearDecision();
+      save();
+      renderBoard();
+    });
+    banner.appendChild(undoBtn);
+    return banner;
+  }
+
+  function createMarksPanel(): HTMLElement {
+    const panel = createElement('div', 'marks-panel');
+    panel.appendChild(createElement('h3', 'marks-title', '取舍记录'));
+
+    (['candidate', 'noted', 'excluded'] as MarkType[]).forEach(type => {
+      const list = board.marksByType(type);
+      if (list.length === 0) return;
+      const group = createElement('div', `marks-group marks-${type}`);
+      const titleText = type === 'excluded' ? '排除（含排除原因）' : MARK_LABELS[type];
+      group.appendChild(createElement('div', 'marks-group-title', `${titleText}（${list.length}）`));
+
+      list.forEach(mark => {
+        const item = createElement('div', 'marks-item');
+        const text = createElement('span', 'marks-item-text',
+          `${mark.date}（${mark.lunarText}，${mark.score}分）${mark.reason ? `：${mark.reason}` : ''}`);
+        item.appendChild(text);
+
+        if (type === 'candidate') {
+          const decideBtn = createElement('button', 'decide-btn', '定为吉日');
+          decideBtn.addEventListener('click', () => onDecide(mark.lunarKey));
+          item.appendChild(decideBtn);
+        }
+        const unmarkBtn = createElement('button', 'unmark-btn', '取消');
+        unmarkBtn.addEventListener('click', () => {
+          board.clearMark(mark.lunarKey);
+          save();
+          renderBoard();
+        });
+        item.appendChild(unmarkBtn);
+        group.appendChild(item);
+      });
+      panel.appendChild(group);
+    });
+    return panel;
+  }
+}
+
+function loadBoard(): CompareBoard {
   try {
-    const canvas = await html2canvas(exportContainer, {
-      scale: 3,
-      useCORS: true,
-      backgroundColor: '#f7f3e9',
-      logging: false,
-      width: 360,
-      windowWidth: 360,
-    });
-
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `吉日清单_${new Date().toISOString().slice(0, 10)}.png`;
-    a.click();
-  } catch (err) {
-    console.error('导出图片失败:', err);
-    alert('导出图片失败，请重试');
-  } finally {
-    document.body.removeChild(exportContainer);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const board = CompareBoard.fromJSON(raw);
+      if (board) return board;
+    }
+  } catch {
+    // 本地保存不可用时使用空对比板
   }
+  return new CompareBoard();
 }

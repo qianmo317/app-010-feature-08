@@ -534,6 +534,355 @@ function injectStyles() {
       margin-top: 20px;
     }
 
+    /* 择日对比板 */
+    .board-empty {
+      background: var(--card-bg);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      color: var(--text-light);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .board-summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .board-count {
+      flex: 1;
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    .export-btn-inline {
+      padding: 8px 16px;
+      background: var(--secondary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .clear-board-btn {
+      padding: 8px 16px;
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .clear-board-btn:hover {
+      background: var(--accent);
+      color: white;
+    }
+
+    /* 已定吉日横幅 */
+    .final-banner {
+      background: linear-gradient(135deg, #fff5e6, #ffe9d0);
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    .final-title {
+      font-size: 17px;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .final-reason {
+      font-size: 14px;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .final-time {
+      font-size: 12px;
+      color: var(--text-light);
+    }
+
+    .final-undo-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 4px 12px;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    /* 区间对照 */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .compare-col {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .compare-col-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .compare-col-title {
+      font-weight: bold;
+      color: var(--primary);
+      font-size: 15px;
+    }
+
+    .range-remove-btn {
+      padding: 2px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-light);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .range-remove-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .compare-col-range {
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .compare-col-events {
+      font-size: 12px;
+      color: var(--text-light);
+      margin-bottom: 8px;
+    }
+
+    .compare-stats {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .compare-stats span {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .stat-best { background: #ffebee; color: var(--accent); font-weight: bold; }
+    .stat-good { background: #e8f5e9; color: var(--secondary); }
+    .stat-normal { background: #f5f5f5; color: var(--text-light); }
+    .stat-bad { background: #efebe9; color: #6d4c41; }
+
+    .compare-dup-note {
+      font-size: 12px;
+      color: #b26a00;
+      background: #fff8e1;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin-bottom: 8px;
+    }
+
+    /* 靠前日期行 */
+    .top-date-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .top-date-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: white;
+    }
+
+    .top-date-row.mark-candidate { border-left: 4px solid var(--secondary); }
+    .top-date-row.mark-noted { border-left: 4px solid #b26a00; }
+    .top-date-row.mark-excluded { border-left: 4px solid #999; opacity: 0.75; }
+    .top-date-row.is-final { border-color: var(--accent); background: #fff8f5; }
+
+    .top-date-main {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .top-date-main:hover .top-date-solar {
+      color: var(--primary);
+      text-decoration: underline;
+    }
+
+    .top-date-solar {
+      font-weight: bold;
+      font-size: 13px;
+    }
+
+    .top-date-lunar {
+      font-size: 12px;
+      color: var(--text-light);
+    }
+
+    .top-date-score {
+      margin-left: auto;
+      font-weight: bold;
+      color: var(--primary);
+      font-size: 13px;
+    }
+
+    .final-badge {
+      padding: 1px 6px;
+      background: var(--accent);
+      color: white;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .top-date-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .mark-btn {
+      flex: 1;
+      padding: 3px 0;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      background: white;
+    }
+
+    .mark-btn-candidate { border: 1px solid var(--secondary); color: var(--secondary); }
+    .mark-btn-candidate.active, .mark-btn-candidate:hover { background: var(--secondary); color: white; }
+    .mark-btn-noted { border: 1px solid #b26a00; color: #b26a00; }
+    .mark-btn-noted.active, .mark-btn-noted:hover { background: #b26a00; color: white; }
+    .mark-btn-excluded { border: 1px solid #999; color: #666; }
+    .mark-btn-excluded.active, .mark-btn-excluded:hover { background: #999; color: white; }
+
+    .top-date-reason {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-light);
+      background: #faf6ef;
+      border-radius: 4px;
+      padding: 4px 8px;
+    }
+
+    .top-toggle-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 6px;
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--text-light);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .top-toggle-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* 取舍记录 */
+    .marks-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+    }
+
+    .marks-title {
+      color: var(--primary);
+      font-size: 16px;
+      margin-bottom: 12px;
+      border-left: 4px solid var(--primary);
+      padding-left: 12px;
+    }
+
+    .marks-group {
+      margin-bottom: 12px;
+    }
+
+    .marks-group-title {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .marks-candidate .marks-group-title { color: var(--secondary); }
+    .marks-noted .marks-group-title { color: #b26a00; }
+    .marks-excluded .marks-group-title { color: #666; }
+
+    .marks-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px dashed var(--border);
+      font-size: 13px;
+    }
+
+    .marks-item:last-child {
+      border-bottom: none;
+    }
+
+    .marks-item-text {
+      flex: 1;
+    }
+
+    .decide-btn {
+      padding: 3px 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .unmark-btn {
+      padding: 3px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-light);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .unmark-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
     /* 农事页 */
     .month-index {
       display: flex;
